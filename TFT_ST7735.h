@@ -378,7 +378,7 @@ class TFT_ST7735 : public Print {
   uint16_t textcolor, textbgcolor, fontsloaded;
   
   // AdafruitGFX font support
-  uint16_t GFXfont *gfxFont;
+  GFXfont *gfxFont;
 
   uint8_t  addr_row, addr_col;
 
