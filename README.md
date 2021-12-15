@@ -16,3 +16,6 @@ http://www.instructables.com/id/Arduino-TFT-display-and-font-library/
 
 Soon a dedicated Instructable will be available to document the library features, until then do explore the example sketches.
 Have fun!
+
+# Added Built in AdafruitGFX font support.
+No need call Original AdafruitGFX library because it is only use GXF font support function
