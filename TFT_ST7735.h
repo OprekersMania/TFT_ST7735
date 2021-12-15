@@ -384,6 +384,7 @@ class TFT_ST7735 : public Print {
 
   uint8_t  textfont,
            textsize,
+	   _fontSize,
            textdatum,
            rotation;
 
