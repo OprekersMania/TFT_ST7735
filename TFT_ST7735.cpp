@@ -1098,7 +1098,7 @@ spi_begin();
 spi_end();
 #endif  // end of LOAD_GLCD
 
-ifdef LOAD_GFX
+#ifdef LOAD_GFX
 	} else {  // Custom font / GFX FONT LOADED
 		// Character is assumed previously filtered by write() to eliminate
 		// newlines, returns, non-printable characters, etc.  Calling
@@ -2492,7 +2492,7 @@ inline void spiWait12(void)
 ** Function name:           AdafruitGFX Support function
 ** Descriptions:            setFontGFX, charBounds, getTextBounds
 ***************************************************************************************/
-void TFT_ST7735_MOD::setFont(const GFXfont *f) {
+void TFT_ST7735::setFont(const GFXfont *f) {
     if(f) {            // Font struct pointer passed in?
         if(!gfxFont) { // And no current font struct?
             // Switching from classic to new font behavior.
@@ -2507,7 +2507,7 @@ void TFT_ST7735_MOD::setFont(const GFXfont *f) {
     gfxFont = (GFXfont *)f;
 }
 
-void TFT_ST7735_MOD::charBounds(unsigned char c, int16_t *x, int16_t *y,
+void TFT_ST7735::charBounds(unsigned char c, int16_t *x, int16_t *y,
                               int16_t *minx, int16_t *miny, int16_t *maxx,
                               int16_t *maxy) {
 
@@ -2571,7 +2571,7 @@ void TFT_ST7735_MOD::charBounds(unsigned char c, int16_t *x, int16_t *y,
   }
 }
 
-void TFT_ST7735_MOD::getTextBounds(const char *str, int16_t x, int16_t y,
+void TFT_ST7735::getTextBounds(const char *str, int16_t x, int16_t y,
                                  int16_t *x1, int16_t *y1, uint16_t *w,
                                  uint16_t *h) {
 
@@ -2599,7 +2599,7 @@ void TFT_ST7735_MOD::getTextBounds(const char *str, int16_t x, int16_t y,
   }
 }
 
-void TFT_ST7735_MOD::getTextBounds(const String &str, int16_t x, int16_t y,
+void TFT_ST7735::getTextBounds(const String &str, int16_t x, int16_t y,
                                  int16_t *x1, int16_t *y1, uint16_t *w,
                                  uint16_t *h) {
   if (str.length() != 0) {
