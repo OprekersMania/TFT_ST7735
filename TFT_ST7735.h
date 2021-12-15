@@ -67,6 +67,10 @@
   #endif
 #endif
 
+#ifdef LOAD_GFX
+	#include "gfxfont.h"
+#endif
+
 #include <Arduino.h>
 #include <Print.h>
 
@@ -322,7 +326,13 @@ class TFT_ST7735 : public Print {
            writecommand(uint8_t c),
            writedata(uint8_t d),
            commandList(const uint8_t *addr);
-
+		   
+  // AdafruitGFX font support
+  void setFont(const GFXfont *f = NULL);
+  void getTextBounds(const char *string, int16_t x, int16_t y, int16_t *x1, int16_t *y1, uint16_t *w, uint16_t *h);
+  void getTextBounds(const String &str, int16_t x, int16_t y, int16_t *x1, int16_t *y1, uint16_t *w, uint16_t *h);
+  void centerText(uint8_t posX, uint8_t posY, uint8_t w, uint8_t h, String text);
+  
   uint8_t  getRotation(void);
 
   uint16_t fontsLoaded(void),
@@ -345,6 +355,9 @@ class TFT_ST7735 : public Print {
 
  private:
 
+  // AdafruitGFX font support
+  void charBounds(unsigned char c, int16_t *x, int16_t *y, int16_t *minx, int16_t *miny, int16_t *maxx, int16_t *maxy);
+				  
     void   setWindow(int16_t x0, int16_t y0, int16_t x1, int16_t y1);
 
   uint8_t  tabcolor,
@@ -363,6 +376,9 @@ class TFT_ST7735 : public Print {
            cursor_x, cursor_y, padX;
 
   uint16_t textcolor, textbgcolor, fontsloaded;
+  
+  // AdafruitGFX font support
+  uint16_t GFXfont *gfxFont;
 
   uint8_t  addr_row, addr_col;
 
