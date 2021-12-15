@@ -23,6 +23,42 @@
 #include "wiring_private.h"
 #include <SPI.h>
 
+
+#ifdef LOAD_GFX
+// Pointers are a peculiar case...typically 16-bit on AVR boards,
+// 32 bits elsewhere.  Try to accommodate both...
+
+#if !defined(__INT_MAX__) || (__INT_MAX__ > 0xFFFF)
+ #define pgm_read_pointer(addr) ((void *)pgm_read_dword(addr))
+#else
+ #define pgm_read_pointer(addr) ((void *)pgm_read_word(addr))
+#endif
+
+inline GFXglyph * pgm_read_glyph_ptr(const GFXfont *gfxFont, uint8_t c)
+{
+#ifdef __AVR__
+    return &(((GFXglyph *)pgm_read_pointer(&gfxFont->glyph))[c]);
+#else
+    // expression in __AVR__ section may generate "dereferencing type-punned pointer will break strict-aliasing rules" warning
+    // In fact, on other platforms (such as STM32) there is no need to do this pointer magic as program memory may be read in a usual way
+    // So expression may be simplified
+    return gfxFont->glyph + c;
+#endif //__AVR__
+}
+
+inline uint8_t * pgm_read_bitmap_ptr(const GFXfont *gfxFont)
+{
+#ifdef __AVR__
+    return (uint8_t *)pgm_read_pointer(&gfxFont->bitmap);
+#else
+    // expression in __AVR__ section generates "dereferencing type-punned pointer will break strict-aliasing rules" warning
+    // In fact, on other platforms (such as STM32) there is no need to do this pointer magic as program memory may be read in a usual way
+    // So expression may be simplified
+    return gfxFont->bitmap;
+#endif //__AVR__
+}
+#endif
+
 inline void spiWait17(void) __attribute__((always_inline));
 inline void spiWait15(void) __attribute__((always_inline));
 inline void spiWait14(void) __attribute__((always_inline));
@@ -53,6 +89,9 @@ TFT_ST7735::TFT_ST7735(int16_t w, int16_t h)
   TFT_CS_H;
   pinMode(_cs, OUTPUT);
 
+  _fontSize = 1;
+    gfxFont   = NULL;
+	
   _width    = w;
   _height   = h;
   rotation  = 0;
@@ -93,6 +132,10 @@ TFT_ST7735::TFT_ST7735(int16_t w, int16_t h)
   fontsloaded |= 0x0100; // Bit 8 set
 #endif
 
+// Added gfx font suport if needed
+#ifdef LOAD_GFX
+  fontsloaded |= 0x0200; // Bit 8 set
+#endif
 }
 
 /***************************************************************************************
@@ -347,7 +390,7 @@ void TFT_ST7735::init(void)
       0x00, 0x9F },           //     XEND = 159
 
   Rcmd3[] = {                 // Init for 7735R, part 3 (red or green tab)
-    4,                        //  4 commands in list:
+    2,                        //  4 commands in list:
     ST7735_GMCTRP1, 16      , //  1: Magical unicorn dust, 16 args, no delay:
       0x02, 0x1c, 0x07, 0x12,
       0x37, 0x32, 0x29, 0x2d,
@@ -357,12 +400,14 @@ void TFT_ST7735::init(void)
       0x03, 0x1d, 0x07, 0x06,
       0x2E, 0x2C, 0x29, 0x2D,
       0x2E, 0x2E, 0x37, 0x3F,
-      0x00, 0x00, 0x02, 0x10,
+      0x00, 0x00, 0x02, 0x10
+	  	}; 
+		/*  // Write display on and Normal mode later after init done
     ST7735_NORON  ,    DELAY, //  3: Normal display on, no args, w/delay
       10,                     //     10 ms delay
     ST7735_DISPON ,    DELAY, //  4: Main screen turn on, no args w/delay
       100 };                  //     100 ms delay
-
+	  */
 
      tabcolor = TAB_COLOUR;
 
@@ -398,6 +443,13 @@ void TFT_ST7735::init(void)
        }
        commandList(Rcmd3);
      }
+	 
+	 // Late power ON display with clear display first before turn on 
+	 fillScreen(0);
+	 writecommand(ST7735_NORON);
+    delay(10);
+	 writecommand(ST7735_DISPON);
+    delay(50);
 }
 
 /***************************************************************************************
@@ -969,7 +1021,11 @@ int16_t TFT_ST7735::fontHeight(int font)
 ***************************************************************************************/
 void TFT_ST7735::drawChar(int16_t x, int16_t y, unsigned char c, uint16_t color, uint16_t bg, uint8_t size)
 {
+#ifdef LOAD_GFX
+if(!gfxFont) { // 'Classic' built-in GLCD font - Bypass it if LOAD_GLCD not defined in USER_SETUP.h
+#endif
 #ifdef LOAD_GLCD
+
   if ((x >= _width)            || // Clip right
       (y >= _height)           || // Clip bottom
       ((x + 6 * size - 1) < 0) || // Clip left
@@ -1040,8 +1096,51 @@ spi_begin();
   }
 
 spi_end();
+#endif  // end of LOAD_GLCD
 
-#endif // LOAD_GLCD
+ifdef LOAD_GFX
+	} else {  // Custom font / GFX FONT LOADED
+		// Character is assumed previously filtered by write() to eliminate
+		// newlines, returns, non-printable characters, etc.  Calling
+		// drawChar() directly with 'bad' characters of font may cause mayhem!
+
+		c -= (uint8_t)pgm_read_byte(&gfxFont->first);
+		GFXglyph *glyph  = pgm_read_glyph_ptr(gfxFont, c);
+		uint8_t  *bitmap = pgm_read_bitmap_ptr(gfxFont);
+
+		uint16_t bo = pgm_read_word(&glyph->bitmapOffset);
+		uint8_t  w  = pgm_read_byte(&glyph->width),
+				 h  = pgm_read_byte(&glyph->height);
+		int8_t   xo = pgm_read_byte(&glyph->xOffset),
+				 yo = pgm_read_byte(&glyph->yOffset);
+		uint8_t  xx, yy, bits = 0, bit = 0;
+		int16_t  xo16 = 0, yo16 = 0;
+
+		if(size > 1) {
+			xo16 = xo;
+			yo16 = yo;
+		}
+
+		
+		for(yy=0; yy<h; yy++) {
+			for(xx=0; xx<w; xx++) {
+				if(!(bit++ & 7)) {
+					bits = pgm_read_byte(&bitmap[bo++]);
+				}
+				if(bits & 0x80) {
+					if(size == 1) {
+						drawPixel(x+xo+xx, y+yo+yy, color);
+					} else {
+						fillRect(x+(xo16+xx)*size, y+(yo16+yy)*size,
+						  size, size, color);
+					}
+				}
+				bits <<= 1;
+			}
+		}
+	} // End classic vs custom font
+#endif // LOAD_GFX
+
 }
 
 /***************************************************************************************
@@ -1652,6 +1751,9 @@ size_t TFT_ST7735::write(uint8_t uniCode)
   if (textfont==1) return 0;
 #endif
 
+#ifdef LOAD_GFX // AdafruitGFX font support
+if(!gfxFont) { 
+#endif
   height = height * textsize;
 
   if (uniCode == '\n') {
@@ -1667,6 +1769,34 @@ size_t TFT_ST7735::write(uint8_t uniCode)
     }
     cursor_x += drawChar(uniCode, cursor_x, cursor_y, textfont);
   }
+
+#ifdef LOAD_GFX  // AdafruitGFX font support
+    } else { // Custom font
+			uint8_t charheight = (uint8_t)pgm_read_byte(&gfxFont->yAdvance);		//char default hight
+			height = (int16_t)textsize * charheight;
+	
+        if(uniCode == '\n') {
+            cursor_x  = 0;
+            cursor_y += (height-charheight);
+        } else if(uniCode != '\r') {
+            uint8_t first = pgm_read_byte(&gfxFont->first);
+            if((uniCode >= first) && (uniCode <= (uint8_t)pgm_read_byte(&gfxFont->last))) {
+                GFXglyph *glyph  = pgm_read_glyph_ptr(gfxFont, uniCode - first);
+                uint8_t   w     = pgm_read_byte(&glyph->width),
+                          h     = pgm_read_byte(&glyph->height);
+                if((w > 0) && (h > 0)) { // Is there an associated bitmap?
+                    int16_t xo = (int8_t)pgm_read_byte(&glyph->xOffset); // sic
+                    if(textwrap && ((cursor_x + textsize * (xo + w)) > _width)) {
+                        cursor_x  = 0;
+                        cursor_y += (height-charheight);
+                    }
+                    drawChar(cursor_x, cursor_y, uniCode, textcolor, textbgcolor, textsize);
+                }
+                cursor_x += (uint8_t)pgm_read_byte(&glyph->xAdvance) * (int16_t)textsize;
+            }
+        }
+  }
+#endif
   return 1;
 }
 
@@ -1677,16 +1807,35 @@ size_t TFT_ST7735::write(uint8_t uniCode)
 int TFT_ST7735::drawChar(unsigned int uniCode, int x, int y, int font)
 {
 
+
+#ifdef LOAD_GFX  // AdafruitGFX font support
+            uint8_t first = pgm_read_byte(&gfxFont->first);
+			GFXglyph *glyph  = pgm_read_glyph_ptr(gfxFont, uniCode - first);
+#endif
+			
   if (font==1)
   {
-#ifdef LOAD_GLCD
+#ifdef LOAD_GLCD || LOAD_GFX  // AdafruitGFX font support in font size 1
       drawChar(x, y, uniCode, textcolor, textbgcolor, textsize);
+if(gfxFont) {
+      return ((uint8_t)pgm_read_byte(&glyph->xAdvance) * textsize);
+} else {
       return 6 * textsize;
+}
 #else
       return 0;
 #endif
   }
-
+  
+if(gfxFont) {  // AdafruitGFX font support for big font (size > 1)
+#ifdef LOAD_GFX
+      drawChar(x, y, uniCode, textcolor, textbgcolor, textsize);
+      return ((uint8_t)pgm_read_byte(&glyph->xAdvance) * textsize);
+#else
+      return 0;
+#endif
+} 
+	  
   unsigned int width  = 0;
   unsigned int height = 0;
   unsigned int flash_address = 0; // 16 bit address OK for Arduino if font files <60K
@@ -2337,3 +2486,123 @@ inline void spiWait12(void)
   MIT license, all text above must be included in any redistribution
 
  ****************************************************/
+ 
+ 
+/***************************************************************************************
+** Function name:           AdafruitGFX Support function
+** Descriptions:            setFontGFX, charBounds, getTextBounds
+***************************************************************************************/
+void TFT_ST7735_MOD::setFont(const GFXfont *f) {
+    if(f) {            // Font struct pointer passed in?
+        if(!gfxFont) { // And no current font struct?
+            // Switching from classic to new font behavior.
+            // Move cursor pos down 6 pixels so it's on baseline.
+            cursor_y += 6;
+        }
+    } else if(gfxFont) { // NULL passed.  Current font struct defined?
+        // Switching from new to classic font behavior.
+        // Move cursor pos up 6 pixels so it's at top-left of char.
+        cursor_y -= 6;
+    }
+    gfxFont = (GFXfont *)f;
+}
+
+void TFT_ST7735_MOD::charBounds(unsigned char c, int16_t *x, int16_t *y,
+                              int16_t *minx, int16_t *miny, int16_t *maxx,
+                              int16_t *maxy) {
+
+  if (gfxFont) {
+
+    if (c == '\n') { // Newline?
+      *x = 0;        // Reset x to zero, advance y by one line
+      *y += textsize * (uint8_t)pgm_read_byte(&gfxFont->yAdvance);
+    } else if (c != '\r') { // Not a carriage return; is normal char
+      uint8_t first = pgm_read_byte(&gfxFont->first),
+              last = pgm_read_byte(&gfxFont->last);
+      if ((c >= first) && (c <= last)) { // Char present in this font?
+        GFXglyph *glyph = pgm_read_glyph_ptr(gfxFont, c - first);
+        uint8_t gw = pgm_read_byte(&glyph->width),
+                gh = pgm_read_byte(&glyph->height),
+                xa = pgm_read_byte(&glyph->xAdvance);
+        int8_t xo = pgm_read_byte(&glyph->xOffset),
+               yo = pgm_read_byte(&glyph->yOffset);
+        if (textwrap && ((*x + (((int16_t)xo + gw) * textsize)) > _width)) {
+          *x = 0; // Reset x to zero, advance y by one line
+          *y += textsize * (uint8_t)pgm_read_byte(&gfxFont->yAdvance);
+        }
+        int16_t tsx = (int16_t)textsize, tsy = (int16_t)textsize,
+                x1 = *x + xo * tsx, y1 = *y + yo * tsy, x2 = x1 + gw * tsx - 1,
+                y2 = y1 + gh * tsy - 1;
+        if (x1 < *minx)
+          *minx = x1;
+        if (y1 < *miny)
+          *miny = y1;
+        if (x2 > *maxx)
+          *maxx = x2;
+        if (y2 > *maxy)
+          *maxy = y2;
+        *x += xa * tsx;
+      }
+    }
+
+  } else { // Default font
+
+    if (c == '\n') {        // Newline?
+      *x = 0;               // Reset x to zero,
+      *y += textsize * 8; // advance y one line
+      // min/max x/y unchaged -- that waits for next 'normal' character
+    } else if (c != '\r') { // Normal char; ignore carriage returns
+      if (textwrap && ((*x + textsize * 6) > _width)) { // Off right?
+        *x = 0;                                       // Reset x to zero,
+        *y += textsize * 8;                         // advance y one line
+      }
+      int x2 = *x + textsize * 6 - 1, // Lower-right pixel of char
+          y2 = *y + textsize * 8 - 1;
+      if (x2 > *maxx)
+        *maxx = x2; // Track max x, y
+      if (y2 > *maxy)
+        *maxy = y2;
+      if (*x < *minx)
+        *minx = *x; // Track min x, y
+      if (*y < *miny)
+        *miny = *y;
+      *x += textsize * 6; // Advance x one char
+    }
+  }
+}
+
+void TFT_ST7735_MOD::getTextBounds(const char *str, int16_t x, int16_t y,
+                                 int16_t *x1, int16_t *y1, uint16_t *w,
+                                 uint16_t *h) {
+
+  uint8_t c; // Current character
+  int16_t minx = 0x7FFF, miny = 0x7FFF, maxx = -1, maxy = -1; // Bound rect
+  // Bound rect is intentionally initialized inverted, so 1st char sets it
+
+  *x1 = x; // Initial position is value passed in
+  *y1 = y;
+  *w = *h = 0; // Initial size is zero
+
+  while ((c = *str++)) {
+    // charBounds() modifies x/y to advance for each character,
+    // and min/max x/y are updated to incrementally build bounding rect.
+    charBounds(c, &x, &y, &minx, &miny, &maxx, &maxy);
+  }
+
+  if (maxx >= minx) {     // If legit string bounds were found...
+    *x1 = minx;           // Update x1 to least X coord,
+    *w = maxx - minx + 1; // And w to bound rect width
+  }
+  if (maxy >= miny) { // Same for height
+    *y1 = miny;
+    *h = maxy - miny + 1;
+  }
+}
+
+void TFT_ST7735_MOD::getTextBounds(const String &str, int16_t x, int16_t y,
+                                 int16_t *x1, int16_t *y1, uint16_t *w,
+                                 uint16_t *h) {
+  if (str.length() != 0) {
+    getTextBounds(const_cast<char *>(str.c_str()), x, y, x1, y1, w, h);
+  }
+}
