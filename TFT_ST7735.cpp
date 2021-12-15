@@ -276,7 +276,7 @@ void TFT_ST7735::init(void)
 	// Initialization commands for ST7735 screens
   static const uint8_t PROGMEM
   Bcmd[] = {                  // Initialization commands for 7735B screens
-    18,                       // 18 commands in list:
+    16,                       // 16 commands in list:
     ST7735_SWRESET,   DELAY,  //  1: Software reset, no args, w/delay
       50,                     //     50 ms delay
     ST7735_SLPOUT ,   DELAY,  //  2: Out of sleep mode, no args, w/delay
@@ -328,11 +328,13 @@ void TFT_ST7735::init(void)
       0x00, 0x81,             //     XEND = 129
     ST7735_RASET  , 4      ,  // 16: Row addr set, 4 args, no delay:
       0x00, 0x02,             //     XSTART = 1
-      0x00, 0x81,             //     XEND = 160
+      0x00, 0x81 },           //     XEND = 160
+    /*  // Write display on and Normal mode later at the end of display init
     ST7735_NORON  ,   DELAY,  // 17: Normal display on, no args, w/delay
       10,                     //     10 ms delay
     ST7735_DISPON ,   DELAY,  // 18: Main screen turn on, no args, w/delay
       255 },                  //     255 = 500 ms delay
+    */
 
   Rcmd1[] = {                 // Init for 7735R, part 1 (red or green tab)
     15,                       // 15 commands in list:
@@ -390,7 +392,7 @@ void TFT_ST7735::init(void)
       0x00, 0x9F },           //     XEND = 159
 
   Rcmd3[] = {                 // Init for 7735R, part 3 (red or green tab)
-    2,                        //  4 commands in list:
+    2,                        //  2 commands in list:
     ST7735_GMCTRP1, 16      , //  1: Magical unicorn dust, 16 args, no delay:
       0x02, 0x1c, 0x07, 0x12,
       0x37, 0x32, 0x29, 0x2d,
@@ -401,13 +403,13 @@ void TFT_ST7735::init(void)
       0x2E, 0x2C, 0x29, 0x2D,
       0x2E, 0x2E, 0x37, 0x3F,
       0x00, 0x00, 0x02, 0x10
-	  	}; 
-		/*  // Write display on and Normal mode later after init done
+    }; 
+    /*  // Write display on and Normal mode later at the end of display init
     ST7735_NORON  ,    DELAY, //  3: Normal display on, no args, w/delay
       10,                     //     10 ms delay
     ST7735_DISPON ,    DELAY, //  4: Main screen turn on, no args w/delay
       100 };                  //     100 ms delay
-	  */
+    */
 
      tabcolor = TAB_COLOUR;
 
@@ -446,9 +448,9 @@ void TFT_ST7735::init(void)
 	 
 	 // Late power ON display with clear display first before turn on 
 	 fillScreen(0);
-	 writecommand(ST7735_NORON);
+	 writecommand(ST7735_NORON); // Normal display on, no args, w/delay
     delay(10);
-	 writecommand(ST7735_DISPON);
+	 writecommand(ST7735_DISPON); // Main screen turn on, no args w/delay
     delay(50);
 }
 
