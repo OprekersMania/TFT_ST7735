@@ -74,7 +74,7 @@ void loop() {
   tft.drawString("1234567890", 0, 63, 1);
   tft.setTextSize(2);
   tft.setTextColor(TFT_YELLOW);
-  tft.drawString("Size 2 !@#$", 0, 90, 1);
+  tft.drawString("Size 2 !@#$", 0, 100, 1);
   delay(WAIT);
   tft.setTextSize(1);
   tft.setFont(); // back to original library support
