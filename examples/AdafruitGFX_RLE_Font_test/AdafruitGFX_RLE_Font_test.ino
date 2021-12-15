@@ -66,14 +66,14 @@ void loop() {
   tft.fillScreen(TFT_BLACK);
 	// TES ADAFRUIT SAMPLE FONT
   tft.setFont(&campus_29p_full);
-  tft.setTextColor(GREEN);
+  tft.setTextColor(TFT_GREEN);
   tft.drawString("Adafruit font", 0, 17, 1);
-  tft.setTextColor(RED);
+  tft.setTextColor(TFT_RED);
   tft.drawString("ABCDE klmno", 0, 40, 1);
-  tft.setTextColor(BLUE);
+  tft.setTextColor(TFT_BLUE);
   tft.drawString("1234567890", 0, 63, 1);
   tft.setTextSize(2);
-  tft.setTextColor(BLUE);
+  tft.setTextColor(TFT_YELLOW);
   tft.drawString("Size 2 !@#$", 0, 90, 1);
   delay(WAIT);
   tft.setTextSize(1);
